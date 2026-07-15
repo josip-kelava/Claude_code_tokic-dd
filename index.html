@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Troškovnik izgradnje kuće — Odra</title>
+<meta name="description" content="Praćenje troškova izgradnje kuće: plan, ugovoreno, plaćeno, novčani tok i tranše kredita." />
+<meta name="theme-color" content="#2a78d6" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏗️</text></svg>" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>Troškovnik izgradnje kuće
+      <span class="subtitle" id="project-subtitle">Odra</span>
+    </h1>
+    <button class="icon-btn" id="theme-toggle" title="Promijeni temu" aria-label="Promijeni temu">🌗</button>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Pregled</button>
+    <button class="tab-btn" data-tab="troskovnik">Troškovnik</button>
+    <button class="tab-btn" data-tab="cashflow">Novčani tok</button>
+    <button class="tab-btn" data-tab="nabava">Nabava</button>
+    <button class="tab-btn" data-tab="povrsine">Površine</button>
+    <button class="tab-btn" data-tab="postavke">Postavke</button>
+  </nav>
+</header>
+
+<main id="app">
+  <section class="view active" id="view-dashboard"></section>
+  <section class="view" id="view-troskovnik"></section>
+  <section class="view" id="view-cashflow"></section>
+  <section class="view" id="view-nabava"></section>
+  <section class="view" id="view-povrsine"></section>
+  <section class="view" id="view-postavke"></section>
+</main>
+
+<div class="save-toast" id="save-toast"></div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
