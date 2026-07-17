@@ -304,7 +304,14 @@ h3.group-title {
   align-items: baseline;
   gap: 8px;
 }
-.cat-row-name { font-weight: 600; font-size: 0.88rem; }
+.cat-row-name { font-weight: 600; font-size: 0.88rem; display: flex; align-items: center; gap: 7px; }
+.cat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--cat-accent, var(--text-muted));
+}
 .cat-row-nums {
   font-size: 0.76rem;
   color: var(--text-secondary);
@@ -383,21 +390,25 @@ h3.group-title {
 .totals-strip b { display: block; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 
 .category-group {
+  --cat-accent: var(--border);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--cat-accent);
   border-radius: var(--radius-m);
-  margin-bottom: 10px;
+  margin-bottom: 16px;
   overflow: hidden;
   background: var(--surface-1);
+  box-shadow: var(--shadow-1);
 }
 .category-head {
-  padding: 11px 13px;
+  padding: 12px 13px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  background: color-mix(in srgb, var(--cat-accent) 12%, var(--surface-1));
   transition: background-color 0.12s;
 }
-.category-head:hover, .category-head:active { background: var(--surface-2); }
+.category-head:hover, .category-head:active { background: color-mix(in srgb, var(--cat-accent) 20%, var(--surface-1)); }
 .category-head-top {
   display: flex;
   justify-content: space-between;
@@ -413,6 +424,7 @@ h3.group-title {
 }
 .category-head-title .chev { color: var(--text-muted); transition: transform .15s; font-size: 0.8rem; }
 .category-group.open .category-head-title .chev { transform: rotate(90deg); }
+.category-head-title .cat-dot { width: 10px; height: 10px; }
 .category-head-nums {
   display: flex;
   gap: 14px;
@@ -423,13 +435,16 @@ h3.group-title {
 }
 .category-body {
   display: none;
-  border-top: 1px solid var(--gridline);
+  border-top: 2px solid color-mix(in srgb, var(--cat-accent) 35%, var(--gridline));
 }
 .category-group.open .category-body { display: block; }
 
 .item-card {
-  padding: 11px 13px;
-  border-bottom: 1px solid var(--gridline);
+  padding: 12px 13px;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--cat-accent) 32%, var(--gridline));
+}
+.item-card:nth-child(even) {
+  background: color-mix(in srgb, var(--cat-accent) 9%, var(--surface-1));
 }
 .item-card:last-child { border-bottom: none; }
 .item-card-top {

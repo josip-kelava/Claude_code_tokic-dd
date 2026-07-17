@@ -20,6 +20,16 @@
 
   const NABAVA_STATUS_OPTIONS = ["Plan", "Za ponudu", "Projektna", "Naručeno", "Dostavljeno"];
 
+  const CATEGORY_ACCENTS = [
+    "var(--blue)", "var(--green)", "var(--magenta)", "var(--yellow)",
+    "var(--aqua)", "var(--orange)", "var(--violet)", "var(--red)",
+  ];
+  function categoryAccent(cat) {
+    const list = categoryList();
+    const idx = list.indexOf(cat);
+    return CATEGORY_ACCENTS[(idx < 0 ? 0 : idx) % CATEGORY_ACCENTS.length];
+  }
+
   // ---------------------------------------------------------------- utils
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
@@ -209,10 +219,10 @@
     categoryList().forEach((cat) => {
       const t = categoryTotals(cat);
       if (t.count === 0) return;
-      const row = el("div", { class: "cat-row" });
+      const row = el("div", { class: "cat-row", style: `--cat-accent:${categoryAccent(cat)}` });
       row.addEventListener("click", () => switchTab("troskovnik", { category: cat }));
       row.appendChild(el("div", { class: "cat-row-top" }, [
-        el("div", { class: "cat-row-name" }, [cat]),
+        el("div", { class: "cat-row-name" }, [el("span", { class: "cat-dot" }), cat]),
         el("div", { class: "cat-row-nums" }, [`${eur(t.placeno)} / ${eur(t.planirano)}`]),
       ]));
       row.appendChild(progressBar(t.planirano ? t.placeno / t.planirano : 0, t.placeno > t.planirano));
@@ -357,11 +367,12 @@
       const cats = categoryList().filter((c) => filtered.some((i) => i.kategorija === c));
       cats.forEach((cat) => {
         const catItems = filtered.filter((i) => i.kategorija === cat);
-        const group = el("div", { class: "category-group" + (openCategories.has(cat) ? " open" : ""), "data-cat": cat });
+        const accent = categoryAccent(cat);
+        const group = el("div", { class: "category-group" + (openCategories.has(cat) ? " open" : ""), "data-cat": cat, style: `--cat-accent:${accent}` });
         const head = el("div", { class: "category-head" });
         const t = categoryTotals(cat, filtered);
         head.appendChild(el("div", { class: "category-head-top" }, [
-          el("div", { class: "category-head-title" }, [el("span", { class: "chev" }, ["▶"]), `${cat} (${t.count})`]),
+          el("div", { class: "category-head-title" }, [el("span", { class: "chev" }, ["▶"]), el("span", { class: "cat-dot" }), `${cat} (${t.count})`]),
         ]));
         head.appendChild(el("div", { class: "category-head-nums" }, [
           el("span", {}, [`Plan: ${eur(t.planirano)}`]),
