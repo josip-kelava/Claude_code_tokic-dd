@@ -411,7 +411,10 @@
       el("span", { class: "item-wbs" }, [item.wbs + " · " + (item.izvor || "")]),
       el("div", { class: "item-opis" }, [item.opis]),
     ]));
-    top.appendChild(el("div", { class: "item-plan" }, [eur(item.ukupno), el("div", { class: "field-label", style: "text-align:right;margin-top:2px" }, ["plan"])]));
+    top.appendChild(el("div", { style: "text-align:right" }, [
+      el("input", { type: "number", step: "1", min: "0", "data-field": "ukupno", value: item.ukupno ?? "", class: "item-plan-input" }),
+      el("div", { class: "field-label", style: "text-align:right;margin-top:2px" }, ["plan (€)"]),
+    ]));
     card.appendChild(top);
 
     card.appendChild(el("div", { class: "item-meta" }, [
@@ -467,7 +470,7 @@
     if (!item) return;
     const fieldName = inputEl.dataset.field;
     let value = inputEl.value;
-    if (fieldName === "ugovoreno" || fieldName === "placeno") value = value === "" ? 0 : round2(parseFloat(value));
+    if (fieldName === "ugovoreno" || fieldName === "placeno" || fieldName === "ukupno") value = value === "" ? 0 : round2(parseFloat(value));
     item[fieldName] = value;
     saveStateDebounced();
 
