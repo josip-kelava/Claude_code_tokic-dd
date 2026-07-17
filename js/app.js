@@ -92,6 +92,9 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.dataVersion === DATA.dataVersion && Array.isArray(parsed.troskovnik)) {
+          if (parsed.postavke && parsed.postavke.lokacija === "Mirna ulica bb, Zagreb - Odra") {
+            parsed.postavke.lokacija = "Odra, Zagreb";
+          }
           return parsed;
         }
       }
@@ -183,14 +186,14 @@
 
     const kpiGrid = el("div", { class: "kpi-grid" });
     kpiGrid.append(
-      kpiCard("Planirano ukupno", eur(g.planirano), p.ciljani_budzet ? `Ciljani budžet: ${eur(p.ciljani_budzet)}` : ""),
-      kpiCard("Ugovoreno", eur(g.ugovoreno), pctStr(g.planirano ? g.ugovoreno / g.planirano : 0) + " od plana"),
-      kpiCard("Plaćeno", eur(g.placeno), pctStr(g.pct) + " od plana"),
-      kpiCard("Preostalo prema planu", eur(g.preostalo), overBudget ? "⚠ iznad ciljanog budžeta" : ""),
-      kpiCard("Rezerva", eur(rezerva), "planirana pričuva"),
-      kpiCard("Iznos kredita", eur(p.iznos_kredita), "ukupno odobreno"),
-      kpiCard("Vlastita sredstva", eur(p.vlastita_sredstva), ""),
-      kpiCard("% plaćeno", pctStr(g.pct), "")
+      kpiCard("Planirano ukupno", eur(g.planirano), p.ciljani_budzet ? `Ciljani budžet: ${eur(p.ciljani_budzet)}` : "", "var(--blue)"),
+      kpiCard("Ugovoreno", eur(g.ugovoreno), pctStr(g.planirano ? g.ugovoreno / g.planirano : 0) + " od plana", "var(--violet)"),
+      kpiCard("Plaćeno", eur(g.placeno), pctStr(g.pct) + " od plana", "var(--green)"),
+      kpiCard("Preostalo prema planu", eur(g.preostalo), overBudget ? "⚠ iznad ciljanog budžeta" : "", overBudget ? "var(--critical)" : "var(--text-muted)"),
+      kpiCard("Rezerva", eur(rezerva), "planirana pričuva", "var(--orange)"),
+      kpiCard("Iznos kredita", eur(p.iznos_kredita), "ukupno odobreno", "var(--yellow)"),
+      kpiCard("Vlastita sredstva", eur(p.vlastita_sredstva), "", "var(--text-muted)"),
+      kpiCard("% plaćeno", pctStr(g.pct), "", "var(--blue)")
     );
     root.appendChild(kpiGrid);
 
@@ -241,8 +244,8 @@
     root.appendChild(el("p", { class: "empty-hint" }, ["Otvorite karticu 'Novčani tok' za grafikon plana i tranši kroz vrijeme."]));
   }
 
-  function kpiCard(label, value, sub) {
-    return el("div", { class: "kpi-card" }, [
+  function kpiCard(label, value, sub, accent) {
+    return el("div", { class: "kpi-card", style: accent ? `--accent:${accent}` : "" }, [
       el("div", { class: "kpi-label" }, [label]),
       el("div", { class: "kpi-value" }, [value]),
       sub ? el("div", { class: "kpi-sub" }, [sub]) : null,
@@ -876,6 +879,7 @@
       input.addEventListener("input", () => {
         p[key] = (type === "number") ? (input.value === "" ? 0 : parseFloat(input.value)) : input.value;
         saveStateDebounced();
+        if (key === "lokacija") updateHeaderSubtitle();
       });
       wrap.appendChild(input);
       return wrap;
@@ -927,6 +931,7 @@
       if (confirm("Vratiti sve podatke na izvorne vrijednosti iz Excela? Sve vaše izmjene bit će izgubljene.")) {
         state = JSON.parse(JSON.stringify(DATA));
         saveStateNow();
+        updateHeaderSubtitle();
         toast("Vraćeno na izvorno");
         switchTab("dashboard");
       }
@@ -954,6 +959,7 @@
         if (!parsed || !Array.isArray(parsed.troskovnik)) throw new Error("neispravan format");
         state = parsed;
         saveStateNow();
+        updateHeaderSubtitle();
         toast("Podaci uvezeni");
         switchTab("dashboard");
       } catch (e) {
@@ -963,6 +969,12 @@
     reader.readAsText(file);
   }
 
+  function updateHeaderSubtitle() {
+    const subtitleEl = $("#project-subtitle");
+    if (subtitleEl) subtitleEl.textContent = state.postavke.lokacija || "";
+  }
+
   // ---------------------------------------------------------------- init
+  updateHeaderSubtitle();
   renderDashboard();
 })();

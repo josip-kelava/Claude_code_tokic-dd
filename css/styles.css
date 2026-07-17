@@ -24,9 +24,11 @@
   --critical: #d03b3b;
 
   --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 18px;
-  --shadow-1: 0 1px 3px rgba(11, 11, 11, 0.08), 0 1px 2px rgba(11, 11, 11, 0.06);
+  --radius-m: 14px;
+  --radius-l: 20px;
+  --shadow-1: 0 1px 3px rgba(11, 11, 11, 0.07), 0 4px 14px rgba(11, 11, 11, 0.05);
+  --accent-header-1: #2a78d6;
+  --accent-header-2: #4a3aa7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,6 +48,9 @@
     --yellow: #c98500;
     --orange: #d95926;
     --red: #e66767;
+    --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.22);
+    --accent-header-1: #3987e5;
+    --accent-header-2: #9085e9;
   }
 }
 
@@ -65,6 +70,9 @@
   --yellow: #c98500;
   --orange: #d95926;
   --red: #e66767;
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.22);
+  --accent-header-1: #3987e5;
+  --accent-header-2: #9085e9;
 }
 
 * { box-sizing: border-box; }
@@ -95,10 +103,12 @@ input, select, textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
   padding: 7px 9px;
+  transition: outline-color 0.1s, border-color 0.1s;
 }
 input:focus, select:focus, textarea:focus {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
+  border-color: var(--blue);
 }
 input[type="number"] { font-variant-numeric: tabular-nums; }
 
@@ -109,6 +119,13 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   z-index: 20;
   background: var(--surface-1);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 0 var(--border);
+}
+.topbar::after {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-header-1), var(--accent-header-2));
 }
 .topbar-inner {
   display: flex;
@@ -142,7 +159,9 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   align-items: center;
   justify-content: center;
   font-size: 1rem;
+  transition: background-color 0.15s, transform 0.1s;
 }
+.icon-btn:active { transform: scale(0.92); }
 
 .tabs {
   display: flex;
@@ -163,11 +182,14 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
+.tab-btn:active { transform: scale(0.96); }
 .tab-btn.active {
   background: var(--blue);
   border-color: var(--blue);
   color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--blue) 40%, transparent);
 }
 
 main {
@@ -200,11 +222,14 @@ h3.group-title {
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
 }
 .kpi-card {
+  --accent: var(--border);
   background: var(--surface-1);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius-m);
   padding: 12px 13px;
   box-shadow: var(--shadow-1);
+  transition: transform 0.12s, box-shadow 0.12s;
 }
 .kpi-label {
   font-size: 0.72rem;
@@ -227,18 +252,19 @@ h3.group-title {
 .card {
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   box-shadow: var(--shadow-1);
-  padding: 14px;
+  padding: 16px;
   margin-bottom: 14px;
 }
 .card-title {
   font-size: 0.9rem;
   font-weight: 700;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  letter-spacing: 0.01em;
 }
 
 /* ---------- Progress bar ---------- */
@@ -254,6 +280,7 @@ h3.group-title {
   height: 100%;
   background: var(--blue);
   border-radius: 999px 0 0 999px;
+  transition: width 0.25s ease, background-color 0.15s;
 }
 .progress.over > span { background: var(--critical); }
 
@@ -262,11 +289,15 @@ h3.group-title {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 9px 0;
+  padding: 9px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius-s);
   border-bottom: 1px solid var(--gridline);
   cursor: pointer;
+  transition: background-color 0.12s;
 }
 .cat-row:last-child { border-bottom: none; }
+.cat-row:hover, .cat-row:active { background: var(--surface-2); }
 .cat-row-top {
   display: flex;
   justify-content: space-between;
@@ -331,7 +362,9 @@ h3.group-title {
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 600;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
+.chip:active { transform: scale(0.95); }
 .chip.active { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
 
 .totals-strip {
@@ -362,7 +395,9 @@ h3.group-title {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: background-color 0.12s;
 }
+.category-head:hover, .category-head:active { background: var(--surface-2); }
 .category-head-top {
   display: flex;
   justify-content: space-between;
@@ -555,8 +590,11 @@ table.simple-table td.num, table.simple-table th.num { text-align: right; font-v
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-primary);
+  transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
 }
-.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn:active { transform: scale(0.97); }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--blue) 35%, transparent); }
+.btn.primary:hover { filter: brightness(1.05); }
 .btn.danger { background: transparent; border-color: var(--critical); color: var(--critical); }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
