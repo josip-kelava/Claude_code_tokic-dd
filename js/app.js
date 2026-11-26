@@ -24,10 +24,15 @@
     "var(--blue)", "var(--green)", "var(--magenta)", "var(--yellow)",
     "var(--aqua)", "var(--orange)", "var(--violet)", "var(--red)",
   ];
-  function categoryAccent(cat) {
-    const list = categoryList();
+  function accentForList(list, cat) {
     const idx = list.indexOf(cat);
     return CATEGORY_ACCENTS[(idx < 0 ? 0 : idx) % CATEGORY_ACCENTS.length];
+  }
+  function categoryAccent(cat) {
+    return accentForList(categoryList(), cat);
+  }
+  function placanjaAccent(cat) {
+    return accentForList(state.placanja_kategorije || [], cat);
   }
 
   // ---------------------------------------------------------------- utils
@@ -146,6 +151,23 @@
     const cls = STATUS_BADGE[status] || "badge-neutral";
     return `<span class="badge ${cls}"><span class="badge-dot"></span>${esc(status || "—")}</span>`;
   }
+  function placanjaTotals(list) {
+    const rows = list || state.placanja_stvarna || [];
+    let ukupno = 0;
+    const byNacin = {};
+    const byKat = {};
+    rows.forEach((r) => {
+      ukupno += r.iznos || 0;
+      byNacin[r.nacin] = round2((byNacin[r.nacin] || 0) + (r.iznos || 0));
+      byKat[r.kategorija] = round2((byKat[r.kategorija] || 0) + (r.iznos || 0));
+    });
+    return { ukupno: round2(ukupno), byNacin, byKat, count: rows.length };
+  }
+  const NACIN_BADGE = { "Gotovina": "badge-neutral", "Kredit kuća": "badge-info", "Kredit zemlja": "badge-warning" };
+  function nacinBadge(nacin) {
+    const cls = NACIN_BADGE[nacin] || "badge-neutral";
+    return `<span class="badge ${cls}"><span class="badge-dot"></span>${esc(nacin || "—")}</span>`;
+  }
 
   // ---------------------------------------------------------------- tabs
   function switchTab(tab, opts) {
@@ -158,6 +180,7 @@
     if (tab === "dashboard") renderDashboard();
     else if (tab === "troskovnik") renderTroskovnik(opts);
     else if (tab === "cashflow") renderCashflow();
+    else if (tab === "placanja") renderPlacanja(opts);
     else if (tab === "nabava") renderNabava();
     else if (tab === "povrsine") renderPovrsine();
     else if (tab === "postavke") renderPostavke();
@@ -212,6 +235,24 @@
     progCard.appendChild(el("div", { class: "card-title" }, ["Napredak plaćanja", el("span", { html: statusBadge(g.pct >= 1 ? "Zavrseno" : "U tijeku") })]));
     progCard.appendChild(progressBar(g.pct));
     root.appendChild(progCard);
+
+    // actual payments summary
+    const pl = placanjaTotals();
+    const plCard = el("div", { class: "card" });
+    plCard.appendChild(el("div", { class: "card-title" }, [
+      "Stvarni troškovi do sada",
+      el("span", { style: "font-weight:400;color:var(--text-muted);font-size:.72rem;cursor:pointer" }, ["svi zapisi →"]),
+    ]));
+    plCard.querySelector(".card-title span").addEventListener("click", () => switchTab("placanja"));
+    const plGrid = el("div", { class: "kpi-grid" });
+    plGrid.append(
+      kpiCard("Ukupno plaćeno", eur(pl.ukupno), `${pl.count} troškova (bez zemljišta)`, "var(--red)"),
+      kpiCard("Gotovina", eur(pl.byNacin["Gotovina"] || 0), "", "var(--blue)"),
+      kpiCard("Kredit kuća", eur(pl.byNacin["Kredit kuća"] || 0), "", "var(--green)"),
+      kpiCard("Kredit zemlja", eur(pl.byNacin["Kredit zemlja"] || 0), "", "var(--yellow)")
+    );
+    plCard.appendChild(plGrid);
+    root.appendChild(plCard);
 
     // category breakdown
     const catCard = el("div", { class: "card" });
@@ -773,6 +814,219 @@
       c.addEventListener("pointermove", showTip);
       c.addEventListener("pointerleave", () => tooltip.hide());
     });
+  }
+
+  // =====================================================================
+  // PLAĆANJA (stvarni troškovi)
+  // =====================================================================
+  let plFilter = { search: "", kategorija: "Sve", nacin: "Svi" };
+
+  function formatDateHR(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}.`;
+  }
+  function getFilteredPlacanja() {
+    const search = plFilter.search.trim().toLowerCase();
+    return (state.placanja_stvarna || []).filter((r) => {
+      if (plFilter.kategorija !== "Sve" && r.kategorija !== plFilter.kategorija) return false;
+      if (plFilter.nacin !== "Svi" && r.nacin !== plFilter.nacin) return false;
+      if (search) {
+        const hay = `${r.opis} ${r.kategorija} ${r.dobavljac || ""} ${r.napomena || ""}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderPlacanja(opts) {
+    if (opts && opts.category) plFilter.kategorija = opts.category;
+    const root = $("#view-placanja");
+    root.innerHTML = "";
+    root.appendChild(el("h2", { class: "view-title" }, ["Plaćanja — stvarni troškovi"]));
+    root.appendChild(el("p", { style: "font-size:.82rem;color:var(--text-secondary);margin:-6px 2px 14px" }, [
+      "Evidencija stvarno plaćenih računa. Ne uključuje trošak zemljišta — odnosi se samo na pripremu i izgradnju kuće.",
+    ]));
+
+    // category breakdown
+    const breakdownCard = el("div", { class: "card" });
+    breakdownCard.appendChild(el("div", { class: "card-title" }, ["Po kategorijama"]));
+    (state.placanja_kategorije || []).forEach((cat) => {
+      const sum = (state.placanja_stvarna || []).filter((r) => r.kategorija === cat).reduce((a, r) => a + (r.iznos || 0), 0);
+      if (sum === 0) return;
+      const row = el("div", { class: "cat-row", style: `--cat-accent:${placanjaAccent(cat)}` });
+      row.addEventListener("click", () => { plFilter.kategorija = plFilter.kategorija === cat ? "Sve" : cat; rebuildList(); catSelect.value = plFilter.kategorija; });
+      row.appendChild(el("div", { class: "cat-row-top" }, [
+        el("div", { class: "cat-row-name" }, [el("span", { class: "cat-dot" }), cat]),
+        el("div", { class: "cat-row-nums" }, [eur(sum)]),
+      ]));
+      breakdownCard.appendChild(row);
+    });
+    root.appendChild(breakdownCard);
+
+    // filters
+    const filtersBar = el("div", { class: "filters-bar" });
+    const searchInput = el("input", { type: "search", placeholder: "Pretraži opis, dobavljača, napomenu…", value: plFilter.search });
+    searchInput.addEventListener("input", debounce(() => { plFilter.search = searchInput.value; rebuildList(); }, 200));
+    const catSelect = el("select", {});
+    catSelect.appendChild(el("option", { value: "Sve" }, ["Sve kategorije"]));
+    (state.placanja_kategorije || []).forEach((c) => catSelect.appendChild(el("option", { value: c }, [c])));
+    catSelect.value = plFilter.kategorija;
+    catSelect.addEventListener("change", () => { plFilter.kategorija = catSelect.value; rebuildList(); });
+    filtersBar.append(searchInput, catSelect);
+    root.appendChild(filtersBar);
+
+    const chips = el("div", { class: "chips" });
+    ["Svi"].concat(state.placanja_nacini || []).forEach((n) => {
+      const chip = el("button", { class: "chip" + (plFilter.nacin === n ? " active" : "") }, [n]);
+      chip.addEventListener("click", () => {
+        plFilter.nacin = n;
+        $all(".chip", chips).forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        rebuildList();
+      });
+      chips.appendChild(chip);
+    });
+    root.appendChild(chips);
+
+    const totalsStrip = el("div", { class: "totals-strip", id: "pl-totals" });
+    root.appendChild(totalsStrip);
+
+    const addBtn = el("button", { class: "btn primary", style: "margin-bottom:12px" }, ["+ Novi trošak"]);
+    addBtn.addEventListener("click", () => {
+      const today = new Date().toISOString().slice(0, 10);
+      (state.placanja_stvarna || (state.placanja_stvarna = [])).unshift({
+        datum: today, opis: "", kategorija: (state.placanja_kategorije || [])[0] || "", dobavljac: "",
+        iznos: 0, nacin: (state.placanja_nacini || [])[0] || "", napomena: "", pdv: false,
+      });
+      saveStateDebounced();
+      rebuildList();
+      const firstInput = $('.placanja-card input[data-pfield="opis"]', listWrap);
+      if (firstInput) firstInput.focus();
+    });
+    root.appendChild(addBtn);
+
+    const listWrap = el("div", { id: "pl-list" });
+    root.appendChild(listWrap);
+
+    listWrap.addEventListener("input", (e) => { if (e.target.matches("[data-pfield]")) handlePlacanjeFieldChange(e.target); });
+    listWrap.addEventListener("change", (e) => { if (e.target.matches("[data-pfield]")) handlePlacanjeFieldChange(e.target); });
+    listWrap.addEventListener("click", (e) => {
+      const delBtn = e.target.closest(".pl-delete");
+      if (delBtn) {
+        const idx = Number(delBtn.closest("[data-pidx]").dataset.pidx);
+        if (confirm("Obrisati ovaj trošak iz evidencije?")) {
+          state.placanja_stvarna.splice(idx, 1);
+          saveStateNow();
+          rebuildList();
+        }
+        return;
+      }
+      const napBtn = e.target.closest(".napomena-toggle");
+      if (napBtn) {
+        const box = napBtn.closest(".placanja-card").querySelector(".napomena-box");
+        box.classList.toggle("open");
+      }
+    });
+
+    rebuildList();
+
+    function rebuildList() {
+      listWrap.innerHTML = "";
+      const filtered = getFilteredPlacanja();
+      const sum = round2(filtered.reduce((a, r) => a + (r.iznos || 0), 0));
+      const strip = $("#pl-totals");
+      strip.innerHTML = "";
+      strip.append(
+        el("div", {}, ["Ukupno", el("b", {}, [eur(sum)])]),
+        el("div", {}, ["Troškova", el("b", {}, [String(filtered.length)])])
+      );
+
+      if (!filtered.length) {
+        listWrap.appendChild(el("p", { class: "empty-hint" }, ["Nema troškova koji odgovaraju filteru."]));
+        return;
+      }
+
+      const sorted = filtered.slice().sort((a, b) => (b.datum || "").localeCompare(a.datum || ""));
+      sorted.forEach((row) => {
+        const realIdx = state.placanja_stvarna.indexOf(row);
+        listWrap.appendChild(buildPlacanjeCard(row, realIdx));
+      });
+    }
+  }
+
+  function buildPlacanjeCard(row, idx) {
+    const accent = placanjaAccent(row.kategorija);
+    const card = el("div", { class: "item-card placanja-card", "data-pidx": idx, style: `--cat-accent:${accent}` });
+    const top = el("div", { class: "item-card-top" });
+    top.appendChild(el("div", { style: "flex:1" }, [
+      el("span", { class: "item-wbs" }, [formatDateHR(row.datum) + " · " + (row.dobavljac || "")]),
+      el("input", { type: "text", "data-pfield": "opis", value: row.opis || "", placeholder: "Opis troška", class: "item-opis-input" }),
+    ]));
+    top.appendChild(el("button", { class: "pl-delete", title: "Obriši" }, ["🗑"]));
+    card.appendChild(top);
+
+    const fields = el("div", { class: "item-fields" });
+    fields.appendChild(field("Datum", el("input", { type: "date", "data-pfield": "datum", value: row.datum || "" })));
+    fields.appendChild(field("Iznos (€)", el("input", { type: "number", step: "1", min: "0", "data-pfield": "iznos", value: row.iznos ?? "" })));
+    const catSel = el("select", { "data-pfield": "kategorija" });
+    (state.placanja_kategorije || []).forEach((c) => catSel.appendChild(el("option", { value: c, selected: c === row.kategorija }, [c])));
+    fields.appendChild(field("Kategorija", catSel));
+    fields.appendChild(field("Dobavljač", el("input", { type: "text", "data-pfield": "dobavljac", value: row.dobavljac || "", placeholder: "—" })));
+    card.appendChild(fields);
+
+    const fields2 = el("div", { class: "item-fields" });
+    const nacinSel = el("select", { "data-pfield": "nacin" });
+    (state.placanja_nacini || []).forEach((n) => nacinSel.appendChild(el("option", { value: n, selected: n === row.nacin }, [n])));
+    fields2.appendChild(field("Način plaćanja", nacinSel));
+    const pdvSel = el("select", { "data-pfield": "pdv" });
+    [["Da", true], ["Ne", false]].forEach(([label, val]) => pdvSel.appendChild(el("option", { value: String(val), selected: !!row.pdv === val }, [label])));
+    fields2.appendChild(field("PDV", pdvSel));
+    card.appendChild(fields2);
+
+    const footer = el("div", { class: "item-footer" });
+    footer.appendChild(el("span", { html: nacinBadge(row.nacin) }));
+    footer.appendChild(el("button", { class: "napomena-toggle" }, ["Napomena ✎"]));
+    card.appendChild(footer);
+
+    const napBox = el("div", { class: "napomena-box" + (row.napomena ? " open" : "") });
+    napBox.appendChild(el("textarea", { "data-pfield": "napomena", placeholder: "Napomena…" }, [row.napomena || ""]));
+    card.appendChild(napBox);
+
+    return card;
+  }
+
+  function handlePlacanjeFieldChange(inputEl) {
+    const card = inputEl.closest("[data-pidx]");
+    const idx = Number(card.dataset.pidx);
+    const row = state.placanja_stvarna[idx];
+    if (!row) return;
+    const fname = inputEl.dataset.pfield;
+    let value = inputEl.value;
+    if (fname === "iznos") value = value === "" ? 0 : round2(parseFloat(value));
+    if (fname === "pdv") value = value === "true";
+    row[fname] = value;
+    saveStateDebounced();
+
+    if (fname === "kategorija") {
+      const newAccent = placanjaAccent(row.kategorija);
+      card.style.setProperty("--cat-accent", newAccent);
+    }
+    if (fname === "nacin") {
+      const span = card.querySelector(".item-footer span");
+      if (span) span.innerHTML = nacinBadge(row.nacin);
+    }
+
+    const strip = $("#pl-totals");
+    if (strip) {
+      const filtered = getFilteredPlacanja();
+      const sum = round2(filtered.reduce((a, r) => a + (r.iznos || 0), 0));
+      strip.innerHTML = "";
+      strip.append(
+        el("div", {}, ["Ukupno", el("b", {}, [eur(sum)])]),
+        el("div", {}, ["Troškova", el("b", {}, [String(filtered.length)])])
+      );
+    }
   }
 
   // =====================================================================

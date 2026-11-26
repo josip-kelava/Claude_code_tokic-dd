@@ -530,6 +530,40 @@ h3.group-title {
   font-style: italic;
 }
 
+/* ---------- Placanja (stvarni troskovi) ---------- */
+.placanja-card {
+  --cat-accent: var(--border);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--cat-accent);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  margin-bottom: 10px;
+}
+.item-opis-input {
+  font-weight: 600;
+  font-size: 0.87rem;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 4px;
+  margin: 1px -4px 0;
+}
+.item-opis-input:focus {
+  border-color: var(--blue);
+  background: var(--surface-2);
+}
+.pl-delete {
+  flex: none;
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  padding: 2px 4px;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+}
+.pl-delete:hover, .pl-delete:active { opacity: 1; }
+
 /* ---------- Chart ---------- */
 .chart-wrap { width: 100%; overflow-x: auto; }
 .chart-svg { display: block; }
