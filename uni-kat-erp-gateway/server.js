@@ -25,6 +25,7 @@ const { URL } = require('url');
 
 const cfg = {
   port: +(process.env.PORT || 8080),
+  host: process.env.HOST || '127.0.0.1',                     // behind a reverse proxy keep 127.0.0.1
   allowedOrigin: process.env.ALLOWED_ORIGIN || 'https://josip-kelava.github.io',
   bcUrl: process.env.BC_TMCONNECT_URL || '',                 // e.g. https://<tmconnect-host>/TMConnectV2.svc
   mode: (process.env.TMC_MODE || 'bcapi').toLowerCase(),     // 'bcapi' (BC TKAT OData API), 'soap' (TMConnect WSDL) or 'xml'
@@ -327,4 +328,4 @@ async function handle(req, res) {
 }
 
 http.createServer((req, res) => { handle(req, res).catch(e => { console.error(e.message); send(res, 500, 'error'); }); })
-  .listen(cfg.port, () => console.log('UNI KAT ERP gateway on :' + cfg.port + ' [' + cfg.mode + '] → ' + (cfg.mode === 'bcapi' ? (cfg.bcBase || '(BC_BASE_URL not set)') : (cfg.bcUrl || '(BC_TMCONNECT_URL not set)'))));
+  .listen(cfg.port, cfg.host, () => console.log('UNI KAT ERP gateway on :' + cfg.port + ' [' + cfg.mode + '] → ' + (cfg.mode === 'bcapi' ? (cfg.bcBase || '(BC_BASE_URL not set)') : (cfg.bcUrl || '(BC_TMCONNECT_URL not set)'))));
