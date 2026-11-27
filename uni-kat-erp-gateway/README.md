@@ -17,7 +17,7 @@ Ako se kasnije spoji izravno na TMConnect SOAP servis, postavi `TMC_MODE=soap`.
 
 ## Pokretanje
 
-Potreban je Node.js 18 ili noviji, bez dodatnih paketa.
+Potreban je Node.js 18 ili noviji, bez dodatnih paketa. Detaljne upute za IT (Linux, Windows/IIS, Azure) su u zasebnom dokumentu.
 
 ```bash
 BC_BASE_URL=https://<bc-server>:<port>/<instanca> \
@@ -39,6 +39,7 @@ Lozinka servisnog korisnika se ne upisuje u repozitorij ni u skripte. Treba je �
 | `TMC_SOAP_NS`, `TMC_SOAP_ACTION`, `TMC_SOAP_PARAM` | iz `TMConnect_V2.14.wsdl` |
 | `BC_AUTH_HEADER` | ako BC servis traži i servisnu autentikaciju (npr. Basic) |
 | `ALLOWED_ORIGIN` | jedina stranica koja smije zvati gateway |
+| `PORT`, `HOST` | port i sučelje (zadano `8080` i `127.0.0.1`; iza reverse proxyja ostaviti `127.0.0.1`) |
 
 ## Rute
 
