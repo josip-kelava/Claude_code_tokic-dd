@@ -158,31 +158,42 @@ function mapStock(v) {
   }
   return out;
 }
+function mapPartnerStock(v) {
+  const out = {};
+  for (const r of unwrap(v, 'itemPartnerStockList')) {
+    if (!r.itemNo) continue;
+    const partner = String(r.partnerCode || 'PARTNER'), loc = String(r.locationCode || '');
+    (out[String(r.itemNo)] = out[String(r.itemNo)] || []).push({ loc: 'PARTNER:' + partner + ':' + loc, name: partner + ' – skladište ' + loc,
+      qty: Math.max(0, +r.inventory || 0), def: false, partner });
+  }
+  return out;
+}
 function mapRestriction(v) {
   const out = {};
   for (const r of unwrap(v, 'itemStockList')) if (r.itemNo) out[String(r.itemNo)] = !!r.isRestricted;
   return out;
 }
-const S_MAT = 'bc13a0a1-e6f7-9f45-0bc1-5892b1d4663e', S_DOST = '86e0a0a3-61b5-16cd-edd7-322dee5a64a7', S_NE = '4f29804c-ca7a-9ec3-2f03-e0230a4deb79', S_NO = 'dd73b12f-c171-d4ba-785f-e5f77d902eed';
+const S_MAT = 'bc13a0a1-e6f7-9f45-0bc1-5892b1d4663e', S_DOST = '86e0a0a3-61b5-16cd-edd7-322dee5a64a7', S_NE = '4f29804c-ca7a-9ec3-2f03-e0230a4deb79', S_NO = 'dd73b12f-c171-d4ba-785f-e5f77d902eed', S_BARTOG = 'b12e7a03-60d7-61a5-c5d1-eac1633d60bb';
 const STATES = '<AvailabilityStates><AvailabilityState><Guid>' + S_MAT + '</Guid><Type>2</Type><ShortDescription>Matična</ShortDescription><Description>Dostupno u matičnoj poslovnici</Description></AvailabilityState>' +
   '<AvailabilityState><Guid>' + S_DOST + '</Guid><Type>2</Type><ShortDescription>Dostupno</ShortDescription><Description>Dostupno</Description></AvailabilityState>' +
   '<AvailabilityState><Guid>' + S_NE + '</Guid><Type>4</Type><ShortDescription>Nedost.</ShortDescription><Description>Nedostupno</Description></AvailabilityState>' +
+  '<AvailabilityState><Guid>' + S_BARTOG + '</Guid><Type>2</Type><ShortDescription>BARTOG</ShortDescription><Description>BARTOG</Description></AvailabilityState>' +
   '<AvailabilityState><Guid>' + S_NO + '</Guid><Type>10</Type><ShortDescription>Nije moguće naručiti</ShortDescription><Description>Nije moguće naručiti</Description></AvailabilityState></AvailabilityStates>';
 async function answerFromBcApi(reqXml, customerNo) {
   const arts = [...reqXml.matchAll(/<ArticleTmf>[\s\S]*?<Guid>([^<]+)<\/Guid>[\s\S]*?<ArticleIdErp>([^<]*)<\/ArticleIdErp>[\s\S]*?<\/ArticleTmf>/g)].map(m => ({ guid: m[1], sku: m[2].trim() }));
   const skus = [...new Set(arts.map(a => a.sku).filter(Boolean))];
-  const [pv, sv, rv] = await Promise.all([bcAction('GetItemsPrice', customerNo, skus), bcAction('GetItemsStock', customerNo, skus),
-    bcAction('GetItemsRestricition', customerNo, skus).catch(() => null)]);
-  const P = mapPrices(pv), W = mapStock(sv), R = rv ? mapRestriction(rv) : {};
+  const [pv, sv, rv, ps] = await Promise.all([bcAction('GetItemsPrice', customerNo, skus), bcAction('GetItemsStock', customerNo, skus),
+    bcAction('GetItemsRestricition', customerNo, skus).catch(() => null), bcAction('GetItemsPartnerStock', customerNo, skus).catch(() => null)]);
+  const P = mapPrices(pv), W = mapStock(sv), R = rv ? mapRestriction(rv) : {}, PS = ps ? mapPartnerStock(ps) : {};
   const infos = arts.map((a, i) => {
-    const p = P[a.sku], w = W[a.sku] || [], restricted = R[a.sku] === true;
+    const p = P[a.sku], w = (W[a.sku] || []).concat(PS[a.sku] || []), restricted = R[a.sku] === true;
     const price = (type, desc, value, reb) => '<Price><Guid>' + crypto.randomUUID() + '</Guid><Type>' + type + '</Type><Description>' + desc + '</Description><Value>' + value.toFixed(2) +
       '</Value><RebateProcent>' + reb + '</RebateProcent><CurrencyCode_Iso_4217>' + xe(p.cur) + '</CurrencyCode_Iso_4217><VAT>' + p.vat + '</VAT><TaxIncluded>' + p.incl + '</TaxIncluded></Price>';
     const prices = (!p || p.restrictedPrice) ? '<Prices />' : '<Prices>' + price(4, p.incl ? 'MPC s popustom' : 'VPC s popustom', p.customer, p.disc) + price(5, p.incl ? 'MPC' : 'VPC', p.price, 0) + '</Prices>';
     const memo = p && p.action ? '<Memos><Memo><Type>0</Type><Text>Akcija' + (p.actionTo ? ' do ' + xe(p.actionTo) : '') + '</Text></Memo></Memos>' : '';
     const mat = w.some(x => x.def && x.qty > 0), any = w.some(x => x.qty > 0);
     const whs = '<Warehouses>' + w.map(x => '<Warehouse><Guid>' + crypto.randomUUID() + '</Guid><Id>' + xe(x.loc) + '</Id><Name>' + xe(x.name) + '</Name><Quantities><Quantity><Value>' + Math.min(x.qty, 10).toFixed(1) +
-      '</Value><AvailabilityState><Guid>' + (x.qty > 0 ? S_DOST : S_NE) + '</Guid><Type>AvailabilityState</Type></AvailabilityState></Quantity></Quantities><IsDefault>' + x.def + '</IsDefault></Warehouse>').join('') + '</Warehouses>';
+      '</Value><AvailabilityState><Guid>' + (x.qty > 0 ? (x.partner === 'BARTOG' ? S_BARTOG : S_DOST) : S_NE) + '</Guid><Type>AvailabilityState</Type></AvailabilityState></Quantity></Quantities><IsDefault>' + x.def + '</IsDefault></Warehouse>').join('') + '</Warehouses>';
     return '<ErpInformation><Guid>00000000-0000-0000-0000-000000000000</Guid><Item><Guid>' + xe(a.guid) + '</Guid><Type>ArticleTmf</Type></Item><RequestedQuantity>1.0</RequestedQuantity><SortId>' + i + '</SortId>' +
       '<AvailabilityState><Guid>' + (restricted ? S_NO : mat ? S_MAT : any ? S_DOST : S_NE) + '</Guid><Type>AvailabilityState</Type></AvailabilityState>' + prices + whs + memo + '</ErpInformation>';
   }).join('');

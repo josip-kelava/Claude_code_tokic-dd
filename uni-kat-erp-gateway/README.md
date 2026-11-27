@@ -1,6 +1,6 @@
 # UNI KAT ERP gateway
 
-Posrednik između UNI KAT-a (preglednik) i Business Centrala. Prema pregledniku govori **TMConnect ERP V2.14** (`GetErpInformation`), isti standard kao TKAT. Prema BC-u zove **BC TKAT API**: OData akcije `TKATApiMgmt_GetItemsPrice`, `TKATApiMgmt_GetItemsStock` i `TKATApiMgmt_GetItemsRestricition` s `customerNo`, servisnim korisnikom i Basic autentikacijom.
+Posrednik između UNI KAT-a (preglednik) i Business Centrala. Prema pregledniku govori **TMConnect ERP V2.14** (`GetErpInformation`), isti standard kao TKAT. Prema BC-u zove **BC TKAT API**: OData akcije `TKATApiMgmt_GetItemsPrice`, `TKATApiMgmt_GetItemsStock`, `TKATApiMgmt_GetItemsRestricition` i `TKATApiMgmt_GetItemsPartnerStock` s `customerNo`, servisnim korisnikom i Basic autentikacijom.
 
 ```
 UNI KAT (preglednik)                 gateway (Tokić server)                          BC
@@ -65,6 +65,7 @@ https://josip-kelava.github.io/Claude_code_tokic-dd/tkat/prototip.html?erp=https
 | `itemOnAction`, `actionToDate` | `Memo` "Akcija do …" |
 | `GetItemsStock`: `storeCode`, `locationCode`, `address`, `availableInventory` | `Warehouse`: `Id` = `locationCode`, `Name` = "P038 na skl. \*C038\* - adresa" (kao u TKAT-u), količina = `availableInventory` (najviše 10) |
 | `GetItemsRestricition`: `isRestricted` | `AvailabilityState` "Nije moguće naručiti" |
+| `GetItemsPartnerStock`: `partnerCode`, `locationCode`, `inventory` | dodatni `Warehouse` "BARTOG – skladište 30", stanje "BARTOG" (kao u TKAT-u) |
 
 Testirano na lažnom BC servisu s oblikom stvarnih odgovora. Primjer: 0067, `price` 11,80, `discountPct` 40 → vaša cijena 7,08 € s PDV-om, MPC 11,80 €.
 
@@ -77,5 +78,4 @@ Testirano na lažnom BC servisu s oblikom stvarnih odgovora. Primjer: 0067, `pri
 
   Do tada je moguća samo interna prijava (`ALLOW_DEV_LOGIN=1`).
 - **HTTPS prema BC-u.** Servisna lozinka ne smije ići nešifrirano, pa treba HTTPS ili barem zatvorena interna mreža.
-- **Dostupnost kod partnera** (`GetItemsPartnerStock`, npr. Bartog) – može se dodati kao dodatna skladišta.
 - **Predaja artikla TKAT košarici** – kasnije.
