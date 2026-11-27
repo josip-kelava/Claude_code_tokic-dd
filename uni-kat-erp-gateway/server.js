@@ -5,8 +5,8 @@
  * Sits between the UNI KAT web page (browser) and the Business Central TMConnect ERP V2.14
  * web service. The browser builds a GetErpInformationRequest exactly as TKAT does, without a
  * password. This service:
- *   1. checks that the user is logged in (customer K-code + password, kept server-side only),
- *   2. puts the user's credentials into <Credentials>,
+ *   1. checks that the user is logged in (session cookie; the customer number is known only server-side),
+ *   2. (soap mode only) puts the user's credentials into <Credentials>,
  *   3. answers it from BC – TMC_MODE=bcapi (default): calls the BC TKAT API (OData actions
  *      TKATApiMgmt_GetItemsPrice / TKATApiMgmt_GetItemsStock, the same ones TKAT's ERP side uses) and
  *      builds a TMConnect GetErpInformationReply; TMC_MODE=soap: forwards to a TMConnect SOAP endpoint,
@@ -40,9 +40,22 @@ const cfg = {
   sessionHours: +(process.env.SESSION_HOURS || 8),
   maxBody: 1024 * 1024,
   maxItems: +(process.env.MAX_ITEMS || 100),
+  maxSessions: +(process.env.MAX_SESSIONS || 5000),
+  rateLimit: +(process.env.RATE_LIMIT_PER_MIN || 120),       // requests per minute per session / IP
 };
+if (cfg.bcBase && /^http:\/\//i.test(cfg.bcBase) && !/^http:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(cfg.bcBase))
+  console.warn('WARNING: BC_BASE_URL uses http:// – the BC service password is sent unencrypted. Use https:// or a closed internal network.');
+if (cfg.devLogin) console.warn('WARNING: ALLOW_DEV_LOGIN=1 – anyone who can reach this service can log in with any customer number. Internal testing only.');
 
-const sessions = new Map(); // sid -> { customerId, username, password, exp }
+const sessions = new Map(); // sid -> { customerId, username, password, exp, homeLocations }
+setInterval(() => { const now = Date.now(); for (const [k, v] of sessions) if (v.exp < now) sessions.delete(k); for (const [k, v] of hits) if (v.t < now - 60e3) hits.delete(k); }, 60e3).unref();
+const hits = new Map(); // key -> { t, n }  (simple fixed-window rate limit)
+function limited(key) {
+  const now = Date.now(), h = hits.get(key);
+  if (!h || h.t < now - 60e3) { hits.set(key, { t: now, n: 1 }); return false; }
+  return ++h.n > cfg.rateLimit;
+}
+const SKU_RE = /^[A-Za-z0-9._\/-]{1,20}$/;
 
 function xe(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
@@ -58,7 +71,7 @@ function cors(req, res) {
 }
 
 function send(res, code, body, type) {
-  res.writeHead(code, { 'Content-Type': type || 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(code, { 'Content-Type': type || 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
   res.end(body);
 }
 
@@ -168,6 +181,31 @@ function mapPartnerStock(v) {
   }
   return out;
 }
+/* CustomerInfo: only fields the gateway needs are kept (no name/address in the session or the browser). */
+function customerInfo(customerNo) {
+  const u = new URL(cfg.bcBase.replace(/\/$/, '') + '/ODataV4/TKATApiMgmt_CustomerInfo/?company=' + encodeURIComponent(cfg.bcCompany));
+  const body = JSON.stringify({ data: JSON.stringify({ customers: [{ customerNo }] }) });
+  return new Promise((resolve, reject) => {
+    const lib = u.protocol === 'https:' ? https : http;
+    const r = lib.request(u, { method: 'POST', timeout: 15000, headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+      Authorization: 'Basic ' + Buffer.from(cfg.bcUser + ':' + cfg.bcPassword).toString('base64') } }, res => {
+      const chunks = []; res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        try {
+          if (res.statusCode !== 200) throw new Error('CustomerInfo HTTP ' + res.statusCode);
+          let v = JSON.parse(Buffer.concat(chunks).toString('utf8')).value; if (typeof v === 'string') v = JSON.parse(v);
+          const rr = v.customerListResult || {};
+          if (String(rr.status).toUpperCase() !== 'OK') throw new Error('CustomerInfo: ' + (rr.errorDescription || rr.status));
+          const c = (rr.customers || []).find(x => String(x.customerNo).toUpperCase() === customerNo);
+          if (!c) return resolve(null);
+          resolve({ blocked: String(c.blocked || '').trim() !== '', homeLocations: [c.locationCode, c.parentShopLinkedInvetory].filter(Boolean).map(String) });
+        } catch (e) { reject(e); }
+      });
+    });
+    r.on('timeout', () => r.destroy(new Error('CustomerInfo timeout')));
+    r.on('error', reject); r.end(body);
+  });
+}
 function mapRestriction(v) {
   const out = {};
   for (const r of unwrap(v, 'itemStockList')) if (r.itemNo) out[String(r.itemNo)] = !!r.isRestricted;
@@ -179,12 +217,15 @@ const STATES = '<AvailabilityStates><AvailabilityState><Guid>' + S_MAT + '</Guid
   '<AvailabilityState><Guid>' + S_NE + '</Guid><Type>4</Type><ShortDescription>Nedost.</ShortDescription><Description>Nedostupno</Description></AvailabilityState>' +
   '<AvailabilityState><Guid>' + S_BARTOG + '</Guid><Type>2</Type><ShortDescription>BARTOG</ShortDescription><Description>BARTOG</Description></AvailabilityState>' +
   '<AvailabilityState><Guid>' + S_NO + '</Guid><Type>10</Type><ShortDescription>Nije moguće naručiti</ShortDescription><Description>Nije moguće naručiti</Description></AvailabilityState></AvailabilityStates>';
-async function answerFromBcApi(reqXml, customerNo) {
+async function answerFromBcApi(reqXml, customerNo, homeLocations) {
   const arts = [...reqXml.matchAll(/<ArticleTmf>[\s\S]*?<Guid>([^<]+)<\/Guid>[\s\S]*?<ArticleIdErp>([^<]*)<\/ArticleIdErp>[\s\S]*?<\/ArticleTmf>/g)].map(m => ({ guid: m[1], sku: m[2].trim() }));
-  const skus = [...new Set(arts.map(a => a.sku).filter(Boolean))];
+  const skus = [...new Set(arts.map(a => a.sku).filter(x => SKU_RE.test(x)))];
+  if (!skus.length) throw new Error('no valid item numbers');
   const [pv, sv, rv, ps] = await Promise.all([bcAction('GetItemsPrice', customerNo, skus), bcAction('GetItemsStock', customerNo, skus),
     bcAction('GetItemsRestricition', customerNo, skus).catch(() => null), bcAction('GetItemsPartnerStock', customerNo, skus).catch(() => null)]);
   const P = mapPrices(pv), W = mapStock(sv), R = rv ? mapRestriction(rv) : {}, PS = ps ? mapPartnerStock(ps) : {};
+  const home = new Set(homeLocations || []);
+  for (const k in W) for (const x of W[k]) x.def = home.has(x.loc);
   const infos = arts.map((a, i) => {
     const p = P[a.sku], w = (W[a.sku] || []).concat(PS[a.sku] || []), restricted = R[a.sku] === true;
     const price = (type, desc, value, reb) => '<Price><Guid>' + crypto.randomUUID() + '</Guid><Type>' + type + '</Type><Description>' + desc + '</Description><Value>' + value.toFixed(2) +
@@ -222,6 +263,10 @@ async function handle(req, res) {
   cors(req, res);
   if (req.method === 'OPTIONS') return send(res, 204, '');
   const path = new URL(req.url, 'http://x').pathname;
+  // Server-side origin check (CORS alone does not stop cross-site POSTs from being sent)
+  if (req.method === 'POST' && req.headers.origin && req.headers.origin !== cfg.allowedOrigin) return send(res, 403, 'forbidden');
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (req.method === 'POST' && limited('ip:' + ip)) return send(res, 429, 'too many requests');
 
   if (req.method === 'POST' && path === '/login') {
     // TODO: validate the customer against BC (e.g. TMConnect GetSession or a BC user check) before creating the session.
@@ -231,8 +276,14 @@ async function handle(req, res) {
     // The BC TKAT API is called with a service account + customerNo, so BC does not check the customer's password.
     // Until UNI KAT gets a real login (TKAT/Topmotive account or Tokić identity), only internal dev logins are possible.
     if (!cfg.devLogin) return send(res, 501, 'Prijava kupca još nije povezana (TKAT/Topmotive ili Tokić identitet)');
+    if (sessions.size >= cfg.maxSessions) return send(res, 503, 'busy');
+    let info = null;
+    if (cfg.mode === 'bcapi') {
+      try { info = await customerInfo(customerId); } catch (e) { console.error('CustomerInfo failed:', e.message); return send(res, 502, 'BC nije dostupan'); }
+      if (!info || info.blocked) return send(res, 403, 'Kupac ne postoji ili je blokiran');
+    }
     const sid = crypto.randomBytes(32).toString('hex');
-    sessions.set(sid, { customerId, username: customerId, password: '', exp: Date.now() + cfg.sessionHours * 3600e3 });
+    sessions.set(sid, { customerId, username: customerId, password: '', homeLocations: info ? info.homeLocations : [], exp: Date.now() + cfg.sessionHours * 3600e3 });
     res.setHeader('Set-Cookie', 'unikat_sid=' + sid + '; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=' + cfg.sessionHours * 3600);
     return send(res, 200, JSON.stringify({ customerId }), 'application/json');
   }
@@ -252,8 +303,12 @@ async function handle(req, res) {
     if ((xml.match(/<ErpInformation>/g) || []).length > cfg.maxItems) return send(res, 400, errorReply('Previše artikala u jednom upitu'), 'application/xml; charset=utf-8');
     if (cfg.mode === 'bcapi') {
       if (!cfg.bcBase || !cfg.bcUser || !cfg.bcCompany) return send(res, 503, errorReply('BC_BASE_URL / BC_COMPANY / BC_USER nisu postavljeni'), 'application/xml; charset=utf-8');
-      try { return send(res, 200, await answerFromBcApi(xml, s.customerId), 'application/xml; charset=utf-8'); }
-      catch (e) { console.error('BC API failed:', e.message); return send(res, 502, errorReply('BC nije dostupan'), 'application/xml; charset=utf-8'); }
+      if (limited('s:' + s.customerId)) return send(res, 429, errorReply('Previše upita'), 'application/xml; charset=utf-8');
+      try { return send(res, 200, await answerFromBcApi(xml, s.customerId, s.homeLocations), 'application/xml; charset=utf-8'); }
+      catch (e) {
+        if (e.message === 'no valid item numbers') return send(res, 400, errorReply('Neispravne šifre artikala'), 'application/xml; charset=utf-8');
+        console.error('BC API failed:', e.message); return send(res, 502, errorReply('BC nije dostupan'), 'application/xml; charset=utf-8');
+      }
     }
     if (!cfg.bcUrl) return send(res, 503, errorReply('BC_TMCONNECT_URL nije postavljen'), 'application/xml; charset=utf-8');
     const inner = injectCredentials(xml, s);

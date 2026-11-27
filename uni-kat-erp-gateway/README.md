@@ -65,13 +65,28 @@ https://josip-kelava.github.io/Claude_code_tokic-dd/tkat/prototip.html?erp=https
 | `itemOnAction`, `actionToDate` | `Memo` "Akcija do …" |
 | `GetItemsStock`: `storeCode`, `locationCode`, `address`, `availableInventory` | `Warehouse`: `Id` = `locationCode`, `Name` = "P038 na skl. \*C038\* - adresa" (kao u TKAT-u), količina = `availableInventory` (najviše 10) |
 | `GetItemsRestricition`: `isRestricted` | `AvailabilityState` "Nije moguće naručiti" |
+| `CustomerInfo` (pri prijavi): `locationCode`, `parentShopLinkedInvetory`, `blocked` | ta skladišta su `IsDefault` (matična poslovnica); blokiran ili nepostojeći kupac se ne može prijaviti |
 | `GetItemsPartnerStock`: `partnerCode`, `locationCode`, `inventory` | dodatni `Warehouse` "BARTOG – skladište 30", stanje "BARTOG" (kao u TKAT-u) |
 
 Testirano na lažnom BC servisu s oblikom stvarnih odgovora. Primjer: 0067, `price` 11,80, `discountPct` 40 → vaša cijena 7,08 € s PDV-om, MPC 11,80 €.
 
+## Sigurnost
+
+- Lozinka BC servisnog korisnika je samo u varijablama okoline ili u spremištu tajni, nikad u pregledniku ni u repozitoriju.
+- Kupac je vezan uz sesiju na serveru (HttpOnly, Secure kolačić). Preglednik ne može zatražiti cijene za drugi `customerNo`.
+- `ALLOWED_ORIGIN`: CORS i provjera zaglavlja `Origin` na serveru. POST s druge stranice dobiva 403.
+- Ograničenje broja upita (`RATE_LIMIT_PER_MIN`, zadano 120) po IP adresi i po kupcu.
+- Najviše 100 artikala po upitu i tijelo do 1 MB.
+- Šifre artikala se provjeravaju (`[A-Za-z0-9._/-]{1,20}`) prije slanja BC-u.
+- Sve vrijednosti iz BC-a se escapeaju u XML-u. Preglednik ih escapea i u HTML-u.
+- Iz `CustomerInfo` se u sesiji drže samo šifre matičnih skladišta i oznaka blokade, bez imena i adrese.
+- Poruke grešaka prema pregledniku su općenite. Detalji idu samo u log, a log nikad ne sadrži lozinke ni tijela upita.
+- Upozorenje pri pokretanju ako je `BC_BASE_URL` na `http://` ili ako je uključen `ALLOW_DEV_LOGIN`.
+- Samo čitanje: `GetErpInformation`. Narudžbe (`SendOrder`, `externalSalesOrders`) nisu izložene.
+- Prototip prihvaća adresu posrednika (`?erp=`) samo na domeni `tokic.hr` ili na `localhost`, pa podmetnuti link ne može preusmjeriti prijavu na tuđi server.
+
 ## Otvoreno
 
-- **Matična poslovnica kupca** (`IsDefault`). `GetItemsStock` je ne vraća. Vjerojatno je u `TKATApiMgmt_CustomerInfo`, pa treba primjer tog odgovora.
 - **Prijava kupca.** BC TKAT API ne provjerava lozinku kupca (zove se servisnim korisnikom + `customerNo`). UNI KAT mora sam potvrditi tko je kupac:
   - kad se otvara iz TKAT-a: predaja prijavljenog korisnika (token ili potpisani parametar), u dogovoru s Topmotiveom;
   - kad se otvara samostalno: isti TKAT račun preko Topmotivea ili Tokić identitet (npr. Entra ID).
